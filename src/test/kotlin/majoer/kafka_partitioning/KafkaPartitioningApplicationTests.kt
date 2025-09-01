@@ -65,7 +65,7 @@ class KafkaPartitioningApplicationTests {
     }
 
     @Test
-    fun randomAssignment() {
+    fun kafkaAssignsPartitions_expectMessagesToArriveOnTheRandomlyAssignedClient() {
         AdminClient.create(props).use { adminClient ->
             val newTopics = mutableSetOf<NewTopic?>(
                 NewTopic("request", 2, -1),
@@ -132,7 +132,7 @@ class KafkaPartitioningApplicationTests {
     }
 
     @Test
-    fun twoCarefullyCraftedKeysToForceRightRouting() {
+    fun fixedAssignments_keyDeterminesTarget_hitWrongInstance() {
         AdminClient.create(props).use { adminClient ->
             val newTopics = mutableSetOf<NewTopic?>(
                 NewTopic("request", 2, -1),
@@ -177,7 +177,7 @@ class KafkaPartitioningApplicationTests {
         }
 
 
-        val conssumer2 = CompletableFuture.runAsync {
+        val instance1 = CompletableFuture.runAsync {
             KafkaProducer<String, String>(props).use { producer ->
                 KafkaConsumer<String, String>(props).use { consumer ->
                     consumer.assign(listOf(TopicPartition("response", 0)))
@@ -193,11 +193,11 @@ class KafkaPartitioningApplicationTests {
             }
         }
 
-        CompletableFuture.allOf(instance0, conssumer2, responder).get()
+        CompletableFuture.allOf(instance0, instance1, responder).get()
     }
 
     @Test
-    fun twoDifferentKeysSamePartition() {
+    fun fixedAssignment_carefullyCraftedKey_canTargetInstance() {
         AdminClient.create(props).use { adminClient ->
             val newTopics = mutableSetOf<NewTopic?>(
                 NewTopic("request", 2, -1),
@@ -262,7 +262,7 @@ class KafkaPartitioningApplicationTests {
     }
 
     @Test
-    fun forcedPartitionsInSender() {
+    fun randomAssignments_sendAssignmentAsKey_targetAssignmentInResponder() {
         AdminClient.create(props).use { adminClient ->
             val newTopics = mutableSetOf<NewTopic?>(
                 NewTopic("request", 2, -1),
@@ -294,7 +294,7 @@ class KafkaPartitioningApplicationTests {
         val instance0 = CompletableFuture.runAsync {
             KafkaProducer<String, String>(props).use { producer ->
                 KafkaConsumer<String, String>(props).use { consumer ->
-                    consumer.assign(listOf(TopicPartition("response", 0)))
+                    consumer.subscribe(listOf("response"))
 
                     (1..iterations).forEach { i ->
                         producer.send(ProducerRecord("request", "${consumer.assignment().first().partition()}", "ping"))
@@ -310,10 +310,10 @@ class KafkaPartitioningApplicationTests {
         }
 
 
-        val conssumer2 = CompletableFuture.runAsync {
+        val instance1 = CompletableFuture.runAsync {
             KafkaProducer<String, String>(props).use { producer ->
                 KafkaConsumer<String, String>(props).use { consumer ->
-                    consumer.assign(listOf(TopicPartition("response", 1)))
+                    consumer.subscribe(listOf("response"))
 
                     (1..iterations).forEach {
                         producer.send(ProducerRecord("request", "${consumer.assignment().first().partition()}", "ping"))
@@ -327,7 +327,7 @@ class KafkaPartitioningApplicationTests {
             }
         }
 
-        CompletableFuture.allOf(instance0, conssumer2, responder).get()
+        CompletableFuture.allOf(instance0, instance1, responder).get()
     }
 
     @Test
